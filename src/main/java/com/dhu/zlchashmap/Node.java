@@ -45,14 +45,11 @@ public class Node<K, V> implements Map.Entry<K, V> {
 
     @Override
     public boolean equals(Object o) {
-        Object k, v, u;
-        Map.Entry<?, ?> e;
-        return (
-                (o instanceof Map.Entry) &&
-                        (k = (e = (Map.Entry<?, ?>) o).getKey()) != null &&
-                        (v = e.getValue()) != null &&
-                        (k == key || k.equals(key)) && (v == (u = val) || v.equals(u))
-        );
+        // 修正：允许 key 或 value 为 null，与 Map.Entry.equals 语义一致。
+        if (o == this) return true;
+        if (!(o instanceof Map.Entry)) return false;
+        Map.Entry<?, ?> e = (Map.Entry<?, ?>) o;
+        return Objects.equals(key, e.getKey()) && Objects.equals(val, e.getValue());
     }
 
     public Node<K, V> find(int h, Object k) {
