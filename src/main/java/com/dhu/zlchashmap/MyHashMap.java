@@ -67,7 +67,7 @@ public class MyHashMap<K, V> {
     }
 
     //保证容量是2的幂次
-    static final int tableSizeFor(int cap) {
+    static int tableSizeFor(int cap) {
         // 修正：使用标准方法得到 >= cap 的最小 2 的幂
         int n = cap - 1;
         n |= n >>> 1; //n |= n >>> 1 等价于  n = n | (n >>> 1);
@@ -196,6 +196,9 @@ public class MyHashMap<K, V> {
                     prev.next = new Node<K, V>(hash(key), key, value);
                 }
                 size++;
+                if (table[index] != null && size >= TREEIFY_THRESHOLD) {
+                    treeifyBin(table, index);
+                }
             }
         }
 
@@ -229,6 +232,10 @@ public class MyHashMap<K, V> {
                     prev.next = head.next;
                 }
                 size--;
+                if (table[index] != null && size <= UNTREEIFY_THRESHOLD && table[index] instanceof RedBlackNode<K, V>) {
+                    // 树转链表
+                    table[index] = untreeifyBin((RedBlackNode<K, V>) table[index]);
+                }
                 return val;
             }
             prev = head;
@@ -249,4 +256,41 @@ public class MyHashMap<K, V> {
         if (head == null) return false;
         return head.find(hash(key), key) != null;
     }
+
+    private void treeifyBin(Node<K, V>[] tab, int index) {
+        Node<K, V> head = tab[index];
+        if (head == null) {
+            return;
+        }
+        if (tab.length < MIN_TREEIFY_CAPACITY) {
+            resize();
+            return;
+        }
+        RedBlackNode<K, V> root = null;
+        RedBlackNode<K, V> newRoot = null;
+        while (head != null) {
+            RedBlackNode<K, V> newNode = new RedBlackNode<>(head.hash, head.key, head.val, null);
+            root = (root == null) ? newNode : root.insertNewNodeWithBalance(root, newNode);
+            head = head.next;
+        }
+        tab[index] = root;
+    }
+
+    private Node<K, V> untreeifyBin(RedBlackNode<K, V> root) {
+        if (root == null) return null;
+        Node<K, V> head = null, tail = null;
+        java.util.Deque<RedBlackNode<K, V>> stack = new java.util.ArrayDeque<>();
+        stack.push(root);
+        while (!stack.isEmpty()) {
+            RedBlackNode<K, V> n = stack.pop();
+            Node<K, V> newNode = new Node<>(n.hash, n.key, n.val, null);
+            if (tail == null) head = newNode;
+            else tail.next = newNode;
+            tail = newNode;
+            if (n.right != null) stack.push(n.right);
+            if (n.left != null) stack.push(n.left);
+        }
+        return head;
+    }
+
 }
