@@ -85,79 +85,106 @@ public class MyHashMap<K, V> {
     }
 
     //扩容表,容量翻倍
+    @SuppressWarnings("unchecked")
     final void resize() {
-        // 保存旧的引用
-        Node<K, V>[] oldTable = this.table;
-        int oldCap = (oldTable == null) ? 0 : oldTable.length;
-        int newSize;
-        if (oldCap == 0) {
-            // 初次扩容/初始化
-            newSize = this.capacity;
-            // 如果 table 还未创建，根据 capacity 创建
-            Node<K, V>[] newTable = new Node[newSize];
-            this.table = newTable;
-            return;
+        Node<K, V>[] oldTab = table;
+        int oldCap = (oldTab == null) ? 0 : oldTab.length;
+        int oldThr = threshold;
+        int newCap, newThr = 0;
+
+        // 1. 计算新容量和新阈值
+        if (oldCap > 0) {
+            if (oldCap >= MAXIMUM_CAPACITY) {
+                threshold = Integer.MAX_VALUE;
+                return;
+            }
+            if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY && oldCap >= DEFAULT_CAPACITY) {
+                newThr = oldThr << 1; // 阈值也翻倍
+            }
+        } else if (oldThr > 0) {
+            newCap = oldThr;
         } else {
-            // 新容量 = 旧容量*2;
-            newSize = oldCap << 1;
-            if (newSize > MAXIMUM_CAPACITY) {
-                newSize = MAXIMUM_CAPACITY;
-            }
+            newCap = DEFAULT_CAPACITY;
+            newThr = (int)(DEFAULT_CAPACITY * LOAD_FACTOR);
         }
-        // 新建newTable 并遍历旧的表
-        @SuppressWarnings("unchecked")
-        Node<K, V>[] newTable = new Node[newSize];
-        for (int i = 0; i < oldCap; i++) {
-            Node<K, V> current = oldTable[i];
-            // 对于空,跳过
-            if (current == null) {
-                continue;
-            } else if (current.next == null) {
-                // 只有一个元素,重新计算index;
-                int index = calculateIndex(current.key, newSize);
-                // 修正：确保断开 old next 指向（虽然 current.next==null 时通常已经是 null）
-                current.next = null;
-                newTable[index] = current;
-            } else {
-                // 若是链表,则按照 hash & oldCap 判断是高位还是低位
-                Node<K, V> loHead = null, loTail = null;
-                Node<K, V> hiHead = null, hiTail = null;
-                Node<K, V> next;
-                while (current != null) {
-                    next = current.next;
-                    // 修正：判断条件应是 (current.hash & oldCap) != 0
-                    // 旧实现 (current.hash & oldTable.length) == 1 是错误的比较
-                    if ((current.hash & oldCap) != 0) {
-                        if (hiTail == null) {
-                            hiHead = current;
-                        } else {
-                            hiTail.next = current;
+        if (newThr == 0) {
+            float ft = (float)newCap * loadFactor;
+            newThr = (newCap < MAXIMUM_CAPACITY && ft < (float)MAXIMUM_CAPACITY ?
+                    (int)ft : Integer.MAX_VALUE);
+        }
+
+        threshold = newThr;
+        this.capacity = newCap;
+        Node<K, V>[] newTab = (Node<K, V>[]) new Node[newCap];
+        table = newTab;
+
+        // 2. 将旧表中的元素移动到新表
+        if (oldTab != null) {
+            for (int j = 0; j < oldCap; ++j) {
+                Node<K, V> e;
+                if ((e = oldTab[j]) != null) {
+                    oldTab[j] = null; // 帮助 GC
+
+                    if (e.next == null) {
+                        // Case 1: 桶中只有一个节点
+                        newTab[e.hash & (newCap - 1)] = e;
+                    } else if (e instanceof RedBlackNode) {
+                        // Case 2: 桶是红黑树
+                        RedBlackNode<K, V> tree = (RedBlackNode<K, V>) e;
+                        Node<K,V>[] lists = tree.split(oldCap); // 拆分成两个链表
+
+                        Node<K,V> loHead = lists[0];
+                        Node<K,V> hiHead = lists[1];
+
+                        // 处理低位链表
+                        if (loHead != null) {
+                            int lc = 0; // low count
+                            for (Node<K,V> p = loHead; p != null; p = p.next) lc++;
+                            if (lc <= UNTREEIFY_THRESHOLD) {
+                                newTab[j] = loHead; // 保持为链表
+                            } else {
+                                newTab[j] = treeify(loHead); // 重新树化
+                            }
                         }
-                        hiTail = current;
+
+                        // 处理高位链表
+                        if (hiHead != null) {
+                            int hc = 0; // high count
+                            for (Node<K,V> p = hiHead; p != null; p = p.next) hc++;
+                            if (hc <= UNTREEIFY_THRESHOLD) {
+                                newTab[j + oldCap] = hiHead; // 保持为链表
+                            } else {
+                                newTab[j + oldCap] = treeify(hiHead); // 重新树化
+                            }
+                        }
                     } else {
-                        if (loTail == null) {
-                            loHead = current;
-                        } else {
-                            loTail.next = current;
+                        // Case 3: 桶是普通链表
+                        Node<K, V> loHead = null, loTail = null;
+                        Node<K, V> hiHead = null, hiTail = null;
+                        Node<K, V> next;
+                        do {
+                            next = e.next;
+                            if ((e.hash & oldCap) == 0) { // 低位
+                                if (loTail == null) loHead = e; else loTail.next = e;
+                                loTail = e;
+                            } else { // 高位
+                                if (hiTail == null) hiHead = e; else hiTail.next = e;
+                                hiTail = e;
+                            }
+                        } while ((e = next) != null);
+
+                        if (loTail != null) {
+                            loTail.next = null;
+                            newTab[j] = loHead;
                         }
-                        loTail = current;
+                        if (hiTail != null) {
+                            hiTail.next = null;
+                            newTab[j + oldCap] = hiHead;
+                        }
                     }
-                    current = next;
                 }
-                if (loTail != null) {
-                    loTail.next = null;
-                }
-                if (hiTail != null) {
-                    hiTail.next = null;
-                }
-                newTable[i] = loHead;
-                newTable[i + oldCap] = hiHead;
             }
         }
-        this.table = newTable;// 替换为新表
-        this.capacity = newSize;
-        // 修正：更新 threshold = capacity * loadFactor
-        this.threshold = (int) (this.capacity * this.loadFactor);
     }
 
     @SuppressWarnings("unchecked")
@@ -176,28 +203,45 @@ public class MyHashMap<K, V> {
             table[index] = node;
             size++;
         } else {
-            //4. 若非空,插入链表末尾或替换已有 key
-            Node<K, V> head = table[index];
-            Node<K, V> prev = null;
-            boolean replaced = false;
-            while (head != null) {
-                if (Objects.equals(head.key, key)) { // 修正：使用 Objects.equals 避免 NPE
-                    oldValue = head.val;
-                    head.val = value;
-                    replaced = true;
-                    break;
+            // 4. 若非空, 处理冲突
+            Node<K, V> p = table[index];
+            if (p instanceof RedBlackNode<K, V> treeNode) { // 检查是否为树节点
+                RedBlackNode<K, V> targetNode = treeNode.findNode(treeNode, hash(key), key);
+                if (targetNode != null) {
+                    oldValue = targetNode.val;
+                    targetNode.val = value; // 仅替换值
+                    return oldValue;
                 }
-                prev = head;
-                head = head.next;
-            }
-            if (!replaced) {
-                // prev 此时为链表尾
-                if (prev != null) {
-                    prev.next = new Node<K, V>(hash(key), key, value);
-                }
+                // 插入新节点到树中
+                treeNode = treeNode.insertNewNodeWithBalance(treeNode, new RedBlackNode<>(hash(key), key, value, null));
+                table[index] = treeNode; // 根节点可能改变，需要更新
                 size++;
-                if (table[index] != null && size >= TREEIFY_THRESHOLD) {
-                    treeifyBin(table, index);
+
+            } else { // 是链表
+                Node<K, V> head = p;
+                Node<K, V> prev = null;
+                boolean replaced = false;
+                int binCount = 0; // 计算链表长度
+                while (head != null) {
+                    binCount++;
+                    if (Objects.equals(head.key, key) && head.hash == hash(key)) {
+                        oldValue = head.val;
+                        head.val = value;
+                        replaced = true;
+                        break;
+                    }
+                    prev = head;
+                    head = head.next;
+                }
+                if (!replaced) {
+                    if (prev != null) {
+                        prev.next = new Node<>(hash(key), key, value);
+                    }
+                    size++;
+                    // 检查是否需要树化
+                    if (binCount + 1 >= TREEIFY_THRESHOLD) {
+                        treeifyBin(table, index);
+                    }
                 }
             }
         }
@@ -217,29 +261,48 @@ public class MyHashMap<K, V> {
         if (isEmpty() || table == null) {
             return null;
         }
+
         // 定位index;
         int index = calculateIndex(key, table.length);
         Node<K, V> head = table[index];
-        Node<K, V> prev = null;
-        while (head != null) {
-            if (Objects.equals(head.key, key)) {
-                // 找到节点,摘链
-                V val = head.val;
-                if (prev == null) {
-                    // 修正：处理头节点被删除的情况
-                    table[index] = head.next;
-                } else {
-                    prev.next = head.next;
-                }
-                size--;
-                if (table[index] != null && size <= UNTREEIFY_THRESHOLD && table[index] instanceof RedBlackNode<K, V>) {
-                    // 树转链表
-                    table[index] = untreeifyBin((RedBlackNode<K, V>) table[index]);
-                }
-                return val;
+        if (head instanceof RedBlackNode) {
+            RedBlackNode<K, V> tree = (RedBlackNode<K, V>) head;
+            RedBlackNode<K, V> targetNode = tree.findNode(tree, hash(key), key);
+            if (targetNode == null) {
+                return null;
             }
-            prev = head;
-            head = head.next;
+            V oldValue = targetNode.val;
+            // 调用树的删除方法，它会返回新的根
+            RedBlackNode<K, V> newRoot = tree.treeDelete(tree, targetNode);
+            table[index] = newRoot;
+            size--;
+            // 检查是否需要反树化
+            if (newRoot != null && newRoot.countNodes(newRoot, 0) <= UNTREEIFY_THRESHOLD) {
+                table[index] = untreeifyBin(newRoot);
+            }
+            return oldValue;
+        } else {
+            Node<K, V> prev = null;
+            while (head != null) {
+                if (Objects.equals(head.key, key)) {
+                    // 找到节点,摘链
+                    V val = head.val;
+                    if (prev == null) {
+                        // 修正：处理头节点被删除的情况
+                        table[index] = head.next;
+                    } else {
+                        prev.next = head.next;
+                    }
+                    size--;
+                    if (table[index] != null && size <= UNTREEIFY_THRESHOLD && table[index] instanceof RedBlackNode<K, V>) {
+                        // 树转链表
+                        table[index] = untreeifyBin((RedBlackNode<K, V>) table[index]);
+                    }
+                    return val;
+                }
+                prev = head;
+                head = head.next;
+            }
         }
         return null;
     }
@@ -291,6 +354,26 @@ public class MyHashMap<K, V> {
             if (n.left != null) stack.push(n.left);
         }
         return head;
+    }
+    final RedBlackNode<K,V> treeify(Node<K,V> head) {
+        RedBlackNode<K,V> root = null;
+        Node<K,V> current = head;
+        while (current != null) {
+            // 保存下一个节点，因为 insertNewNodeWithBalance 不会处理 next 指针
+            Node<K,V> next = current.next;
+            // 将 current 节点包装成 RedBlackNode
+            RedBlackNode<K,V> newNode = new RedBlackNode<>(current.hash, current.key, current.val, null);
+
+            // 将包装后的节点插入到树中并保持平衡
+            if (root == null) {
+                newNode.red = false; // 根节点是黑色
+                root = newNode;
+            } else {
+                root = root.insertNewNodeWithBalance(root, newNode);
+            }
+            current = next;
+        }
+        return root;
     }
 
 }

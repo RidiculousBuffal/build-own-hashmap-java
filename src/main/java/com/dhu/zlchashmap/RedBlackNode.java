@@ -436,4 +436,90 @@ public class RedBlackNode<K, V> extends Node<K, V> {
         }
         return null;
     }
+
+    /**
+     * 将一棵红黑树拆分成两个独立的链表：低位链表和高位链表。
+     * 这个方法会破坏原有的树结构。
+     *
+     * @param bit  用于区分高低位的 bit (就是 oldCap)
+     * @return Node<K,V>[2] 数组, [0] 是低位链表的头, [1] 是高位链表的头。
+     */
+    public final Node<K,V>[] split(int bit) {
+        Node<K,V> loHead = null, loTail = null;
+        Node<K,V> hiHead = null, hiTail = null;
+        Node<K,V>[] result = (Node<K,V>[]) new Node[2];
+
+        // 使用栈进行非递归遍历，以处理深度很大的树
+        java.util.Deque<Node<K,V>> stack = new java.util.ArrayDeque<>();
+        stack.push(this); // 从根节点开始
+
+        while (!stack.isEmpty()) {
+            Node<K,V> p = stack.pop();
+
+            // 关键：将 p 视为一个普通 Node，断开其树连接
+            if (p instanceof RedBlackNode) {
+                RedBlackNode<K, V> rp = (RedBlackNode<K, V>) p;
+                if (rp.right != null) stack.push(rp.right);
+                if (rp.left != null) stack.push(rp.left);
+                rp.parent = rp.left = rp.right = null; // 彻底断开树的引用
+            }
+
+            // 根据 hash & oldCap 判断放入 lo 还是 hi 链表
+            if ((p.hash & bit) == 0) { // 低位
+                if (loTail == null)
+                    loHead = p;
+                else
+                    loTail.next = p;
+                loTail = p;
+            } else { // 高位
+                if (hiTail == null)
+                    hiHead = p;
+                else
+                    hiTail.next = p;
+                hiTail = p;
+            }
+        }
+
+        // 清理尾节点的 next 指针
+        if (loTail != null) loTail.next = null;
+        if (hiTail != null) hiTail.next = null;
+
+        result[0] = loHead;
+        result[1] = hiHead;
+        return result;
+    }
+    public int countNodes(RedBlackNode<K, V> root, int sum) {
+        if (root == null) {
+            return 0;
+        } else {
+            if (root.left != null) {
+                sum = 1 + countNodes(root.left, sum);
+            }
+            if (root.right != null) {
+                sum = 1 + countNodes(root.right, sum);
+            }
+        }
+        return 1 + sum;
+    }
+    @Override
+    public Node<K, V> find(int h, Object k) {
+        return findNode(this, h, k);
+    }
+
+    final RedBlackNode<K,V> treeify(Node<K,V> head) {
+        RedBlackNode<K,V> root = null;
+        while (head != null) {
+            RedBlackNode<K,V> newNode = new RedBlackNode<>(head.hash, head.key, head.val, null);
+            if (root == null) {
+                root = newNode;
+                root.red = false;
+            } else {
+                root = root.insertNewNodeWithBalance(root, newNode);
+            }
+            head = head.next;
+        }
+        return root;
+    }
+
+
 }
