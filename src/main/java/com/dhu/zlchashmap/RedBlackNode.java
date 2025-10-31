@@ -19,10 +19,26 @@ public class RedBlackNode<K, V> extends Node<K, V> {
     RedBlackNode<K, V> right;
     boolean red; // 红 true 黑 false;
 
-    RedBlackNode(int hash, K key, V val, RedBlackNode<K, V> parent) {
+    public RedBlackNode(int hash, K key, V val, RedBlackNode<K, V> parent) {
         super(hash, key, val, null);
         this.parent = parent;
         this.red = true; // 新插入的节点为红色
+    }
+
+    public RedBlackNode<K, V> getParent() {
+        return parent;
+    }
+
+    public RedBlackNode<K, V> getLeft() {
+        return left;
+    }
+
+    public RedBlackNode<K, V> getRight() {
+        return right;
+    }
+
+    public boolean isRed() {
+        return red;
     }
 
     // 辅助方法
