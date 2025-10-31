@@ -250,4 +250,174 @@ public class RedBlackNode<K, V> extends Node<K, V> {
         root = insertFixup(root, newNode);
         return root;
     }
+
+    /* ----------------- 删除相关 ---------By gpt5 mini ----------- */
+
+    // 查找以 x 为根的最小节点
+    private RedBlackNode<K, V> minimum(RedBlackNode<K, V> x) {
+        if (x == null) return null;
+        while (x.left != null) x = x.left;
+        return x;
+    }
+
+    // 用 v 替换 u（transplant）：把 u 的位置替换为 v（v 可能为 null）
+    private RedBlackNode<K, V> transplant(RedBlackNode<K, V> root, RedBlackNode<K, V> u, RedBlackNode<K, V> v) {
+        if (u.parent == null) {
+            root = v;
+        } else if (u == u.parent.left) {
+            u.parent.left = v;
+        } else {
+            u.parent.right = v;
+        }
+        if (v != null) v.parent = u.parent;
+        return root;
+    }
+
+    /**
+     * 删除节点 z（必须是树中的节点），返回新的 root
+     * 调用流程：root = node.treeDelete(root, z);
+     */
+    public RedBlackNode<K, V> treeDelete(RedBlackNode<K, V> root, RedBlackNode<K, V> z) {
+        if (z == null) return root; // nothing to do
+
+        RedBlackNode<K, V> y = z; // 要么被删除的节点，要么要被移走并替换 z 的节点（y 的原始颜色需被记录）
+        boolean yOriginalRed = y.red;
+
+        RedBlackNode<K, V> x; // x 是被移走位置的节点（可能为 null），用于 deleteFixup
+
+        if (z.left == null) {
+            x = z.right;
+            root = transplant(root, z, z.right);
+        } else if (z.right == null) {
+            x = z.left;
+            root = transplant(root, z, z.left);
+        } else {
+            // z 有两个子节点：找到后继 y（z 的右子树最小），把 y 的值放到 z，然后删除 y（y 最多有右子）
+            y = minimum(z.right);
+            yOriginalRed = y.red;
+            x = y.right;
+            if (y.parent == z) {
+                if (x != null) x.parent = y;
+            } else {
+                root = transplant(root, y, y.right);
+                y.right = z.right;
+                if (y.right != null) y.right.parent = y;
+            }
+            root = transplant(root, z, y);
+            y.left = z.left;
+            if (y.left != null) y.left.parent = y;
+            y.red = z.red; // 用 y 取代 z，继承 z 的颜色
+        }
+
+        if (!yOriginalRed) {
+            // 如果被删除或移走的节点原先为黑，则可能破坏黑深度，需要修复
+            root = deleteFixup(root, x, /* parent of x if x==null? */ (x == null) ? null : x.parent);
+        }
+
+        if (root != null) setBlack(root);
+        return root;
+    }
+
+    /**
+     * 删除修复：x 是从被删除位置“替代”出来的节点（可能为 null）
+     * parent 参数：当 x 为 null 时，无法通过 x.parent 访问其父节点，因此传入 parent 以便处理。
+     * 返回可能更新后的 root。
+     */
+    private RedBlackNode<K, V> deleteFixup(RedBlackNode<K, V> root, RedBlackNode<K, V> x, RedBlackNode<K, V> parent) {
+        // x 可能为 null；在循环中我们使用 w = sibling(x) 需要知道 parent
+        while ((x == null || isBlack(x)) && parent != null) {
+            if (parent.left == x) {
+                RedBlackNode<K, V> w = parent.right; // 兄弟
+                if (isRed(w)) {
+                    // case 1: 兄弟为红
+                    setBlack(w);
+                    setRed(parent);
+                    root = rotateLeft(root, parent);
+                    // 更新 w
+                    w = parent.right;
+                }
+                // 此时 w 为黑
+                if ((w.left == null || isBlack(w.left)) && (w.right == null || isBlack(w.right))) {
+                    // case 2: 兄弟的两个子都是黑
+                    setRed(w);
+                    x = parent;
+                    parent = x.parent;
+                } else {
+                    if (w.right == null || isBlack(w.right)) {
+                        // case 3: 兄弟右子为黑，左子为红 -> 先对 w 右旋
+                        setBlack(w.left);
+                        setRed(w);
+                        root = rotateRight(root, w);
+                        w = parent.right;
+                    }
+                    // case 4: 兄弟的右子为红
+                    if (w != null) {
+                        w.red = parent.red; // w 继承 parent 的颜色
+                    }
+                    setBlack(parent);
+                    if (w != null && w.right != null) setBlack(w.right);
+                    root = rotateLeft(root, parent);
+                    x = root; // 修复完成后跳出循环（让外层把 root 设黑）
+                    parent = null;
+                    break;
+                }
+            } else {
+                // parent.right == x
+                RedBlackNode<K, V> w = parent.left; // 兄弟
+                if (isRed(w)) {
+                    // case 1 mirror
+                    setBlack(w);
+                    setRed(parent);
+                    root = rotateRight(root, parent);
+                    w = parent.left;
+                }
+                if ((w.left == null || isBlack(w.left)) && (w.right == null || isBlack(w.right))) {
+                    // case 2 mirror
+                    setRed(w);
+                    x = parent;
+                    parent = x.parent;
+                } else {
+                    if (w.left == null || isBlack(w.left)) {
+                        // case 3 mirror: 兄弟左子为黑，右子为红 -> 先对 w 左旋
+                        setBlack(w.right);
+                        setRed(w);
+                        root = rotateLeft(root, w);
+                        w = parent.left;
+                    }
+                    // case 4 mirror
+                    if (w != null) {
+                        w.red = parent.red;
+                    }
+                    setBlack(parent);
+                    if (w != null && w.left != null) setBlack(w.left);
+                    root = rotateRight(root, parent);
+                    x = root;
+                    parent = null;
+                    break;
+                }
+            }
+        }
+        // 最后把 x 设为黑（若 x 为 null 则 root 已在外部设黑）
+        if (x != null) setBlack(x);
+        return root;
+    }
+
+    /* ----------------- 额外工具方法 -------------------- */
+
+    /**
+     * 查找树中匹配 hash 和 key 的节点（以 root 为根）
+     */
+    public RedBlackNode<K, V> findNode(RedBlackNode<K, V> root, int h, Object k) {
+        RedBlackNode<K, V> p = root;
+        while (p != null) {
+            int cmp = compareKeys((K) k, p.key, h, p.hash);
+            if (cmp < 0) p = p.left;
+            else if (cmp > 0) p = p.right;
+            else {
+                // compareKeys 返回 0 时应当等价于 equals
+                return p;
+            }
+        }
+        return null;
+    }
 }
