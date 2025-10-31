@@ -506,20 +506,7 @@ public class RedBlackNode<K, V> extends Node<K, V> {
         return findNode(this, h, k);
     }
 
-    final RedBlackNode<K,V> treeify(Node<K,V> head) {
-        RedBlackNode<K,V> root = null;
-        while (head != null) {
-            RedBlackNode<K,V> newNode = new RedBlackNode<>(head.hash, head.key, head.val, null);
-            if (root == null) {
-                root = newNode;
-                root.red = false;
-            } else {
-                root = root.insertNewNodeWithBalance(root, newNode);
-            }
-            head = head.next;
-        }
-        return root;
-    }
+
 
 
 }

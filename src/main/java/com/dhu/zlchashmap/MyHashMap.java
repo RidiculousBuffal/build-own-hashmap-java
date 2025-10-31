@@ -321,22 +321,17 @@ public class MyHashMap<K, V> {
     }
 
     private void treeifyBin(Node<K, V>[] tab, int index) {
-        Node<K, V> head = tab[index];
-        if (head == null) {
-            return;
-        }
-        if (tab.length < MIN_TREEIFY_CAPACITY) {
+        if (tab == null || tab.length < MIN_TREEIFY_CAPACITY) {
             resize();
             return;
         }
-        RedBlackNode<K, V> root = null;
-        RedBlackNode<K, V> newRoot = null;
-        while (head != null) {
-            RedBlackNode<K, V> newNode = new RedBlackNode<>(head.hash, head.key, head.val, null);
-            root = (root == null) ? newNode : root.insertNewNodeWithBalance(root, newNode);
-            head = head.next;
+        Node<K, V> e = tab[index];
+        if (e != null) {
+            // 调用统一的 treeify 方法完成转换
+            RedBlackNode<K, V> root = treeify(e);
+            // 将桶的头节点替换为新的树根
+            tab[index] = root;
         }
-        tab[index] = root;
     }
 
     private Node<K, V> untreeifyBin(RedBlackNode<K, V> root) {
@@ -359,21 +354,20 @@ public class MyHashMap<K, V> {
         RedBlackNode<K,V> root = null;
         Node<K,V> current = head;
         while (current != null) {
-            // 保存下一个节点，因为 insertNewNodeWithBalance 不会处理 next 指针
-            Node<K,V> next = current.next;
             // 将 current 节点包装成 RedBlackNode
             RedBlackNode<K,V> newNode = new RedBlackNode<>(current.hash, current.key, current.val, null);
 
-            // 将包装后的节点插入到树中并保持平衡
+            // 插入到新树中并保持平衡
             if (root == null) {
                 newNode.red = false; // 根节点是黑色
                 root = newNode;
             } else {
                 root = root.insertNewNodeWithBalance(root, newNode);
             }
-            current = next;
+
+            // 处理链表中的下一个节点
+            current = current.next;
         }
         return root;
     }
-
 }
